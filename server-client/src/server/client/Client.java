@@ -5,7 +5,6 @@ import java.net.*;
 import javax.swing.*;
 import java.awt.*;
 
-// GUI Client class to manage the chat interface
 public class Client {
     private Socket socket;
     private BufferedReader input;
@@ -14,6 +13,7 @@ public class Client {
     private JFrame frame;
     private JTextArea textArea;
     private JTextField textField;
+    private JComboBox<String> recipientComboBox; // Dropdown for recipient selection
     private JButton sendButton;
 
     public Client(String host, int port) {
@@ -48,41 +48,49 @@ public class Client {
 
         textField = new JTextField();
         textField.setFont(new Font("Verdana", Font.PLAIN, 14));
-        textField.addActionListener(e -> sendMessage());
+
+        recipientComboBox = new JComboBox<>();
+        recipientComboBox.setFont(new Font("Verdana", Font.PLAIN, 14));
 
         sendButton = new JButton("Send");
         sendButton.addActionListener(e -> sendMessage());
 
         JPanel bottomPanel = new JPanel(new BorderLayout());
+        bottomPanel.add(recipientComboBox, BorderLayout.WEST);
         bottomPanel.add(textField, BorderLayout.CENTER);
         bottomPanel.add(sendButton, BorderLayout.EAST);
 
         frame.getContentPane().add(scrollPane, BorderLayout.CENTER);
         frame.getContentPane().add(bottomPanel, BorderLayout.SOUTH);
-        
+
         frame.setVisible(true);
     }
 
-    // Method to send messages to the server
     private void sendMessage() {
-        String userMessage = textField.getText();
-        if (!userMessage.trim().isEmpty()) {
-            output.println(userMessage);
-            textArea.append("You: " + userMessage + "\n"); // Display sent message
+        String recipient = (String) recipientComboBox.getSelectedItem();
+        String userMessage = textField.getText().trim();
+
+        if (!userMessage.isEmpty() && recipient != null) {
+            output.println(recipient + ":" + userMessage); // Send message to selected recipient
+            textArea.append("You to " + recipient + ": " + userMessage + "\n");
             textField.setText(""); // Clear the input field
         } else {
-            showError("Message cannot be empty!");
+            showError("Message cannot be empty or recipient not selected!");
         }
     }
 
-    // Thread to handle receiving messages from the server
     private class ReceiveMessagesHandler implements Runnable {
         @Override
         public void run() {
             String serverMessage;
             try {
                 while ((serverMessage = input.readLine()) != null) {
-                    textArea.append("Other: " + serverMessage + "\n");
+                    if (serverMessage.startsWith("CLIENT_LIST:")) {
+                        // Update the recipient combo box with the list of clients
+                        updateRecipientList(serverMessage);
+                    } else {
+                        textArea.append(serverMessage + "\n");
+                    }
                 }
             } catch (IOException e) {
                 showError("Connection closed: " + e.getMessage());
@@ -92,12 +100,18 @@ public class Client {
         }
     }
 
-    // Show error messages in a dialog
+    private void updateRecipientList(String clientListMessage) {
+        String[] clients = clientListMessage.replace("CLIENT_LIST:", "").split(",");
+        recipientComboBox.removeAllItems();
+        for (String client : clients) {
+            recipientComboBox.addItem(client); // Add each client to the dropdown
+        }
+    }
+
     private void showError(String message) {
         JOptionPane.showMessageDialog(frame, message, "Error", JOptionPane.ERROR_MESSAGE);
     }
 
-    // Close connection and clean up
     private void closeConnection() {
         try {
             if (output != null) output.close();
@@ -110,8 +124,8 @@ public class Client {
     }
 
     public static void main(String[] args) {
-        String host = "127.0.0.1"; // Change this to the server's IP if needed
-        int port = 5555; // Match the server port
+        String host = "127.0.0.1";
+        int port = 5555;
         new Client(host, port);
     }
 }

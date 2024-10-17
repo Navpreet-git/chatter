@@ -1,24 +1,20 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package server.client;
 
-/**
- *
- * @author Nkaur
- */import java.io.*;
+import java.io.*;
 import java.net.*;
 
-// A separate class that handles each client in a dedicated thread
 public class ClientHandler implements Runnable {
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
+    private String username;
+    private OnClientReadyListener listener; // Add a listener interface
 
-    public ClientHandler(Socket socket) {
+    // Constructor now accepts a listener
+    public ClientHandler(Socket socket, String username, OnClientReadyListener listener) {
         this.socket = socket;
+        this.username = username;
+        this.listener = listener; // Store the listener
     }
 
     @Override
@@ -28,14 +24,29 @@ public class ClientHandler implements Runnable {
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
 
+            // Send the assigned username to the client
+            out.println("You are connected as: " + username);
+
+            // Notify the server that this client is ready
+            listener.onClientReady(this);
+
             String clientMessage;
 
             // Keep listening for messages from the client
             while ((clientMessage = in.readLine()) != null) {
-                System.out.println("Received: " + clientMessage);
-                
-                // Broadcast the message to other clients
-                Server.broadcastMessage(clientMessage, this);
+                System.out.println("Received from " + username + ": " + clientMessage);
+
+                // Expect the message format to be "recipientUsername:message"
+                if (clientMessage.contains(":")) {
+                    String[] parts = clientMessage.split(":", 2);
+                    String recipientUsername = parts[0].trim();
+                    String message = parts[1].trim();
+
+                    // Send the message to the specified recipient
+                    Server.sendPrivateMessage(message, this, recipientUsername);
+                } else {
+                    out.println("Invalid message format. Use recipientUsername:message");
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -52,8 +63,17 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    public String getUsername() {
+        return username;
+    }
+
     // Method to send a message to this client
     public void sendMessage(String message) {
         out.println(message);
+    }
+
+    // Listener interface to notify when the client is ready
+    public interface OnClientReadyListener {
+        void onClientReady(ClientHandler clientHandler);
     }
 }

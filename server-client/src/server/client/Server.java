@@ -1,35 +1,30 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package server.client;
 
-/**
- *
- * @author Nkaur
- */
 import java.io.*;
 import java.net.*;
 import java.util.*;
 
-// Server class to manage incoming client connections
 public class Server {
     private static final int PORT = 5555;
     private static Set<ClientHandler> clientHandlers = Collections.synchronizedSet(new HashSet<>());
+    private static int clientCount = 0;
 
     public static void main(String[] args) {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             System.out.println("Server is listening on port " + PORT);
-            
-            // Continuously listen for client connections
+
             while (true) {
                 Socket clientSocket = serverSocket.accept();
-                System.out.println("New client connected");
+                clientCount++;
+                String username = getOrdinalName(clientCount);
 
-                // Create a new ClientHandler to manage this client
-                ClientHandler clientHandler = new ClientHandler(clientSocket);
-                clientHandlers.add(clientHandler);
+                System.out.println(username + " connected");
+
+                // Create a new ClientHandler and provide the listener
+                ClientHandler clientHandler = new ClientHandler(clientSocket, username, handler -> {
+                    clientHandlers.add(handler); // Add the client only after it's ready
+                    broadcastClientList(); // Broadcast client list after the client is ready
+                });
 
                 // Start the new client handler in a separate thread
                 Thread thread = new Thread(clientHandler);
@@ -40,22 +35,47 @@ public class Server {
         }
     }
 
-    // Broadcast a message to all clients except the sender
-    public static void broadcastMessage(String message, ClientHandler sender) {
+    private static String getOrdinalName(int number) {
+        return number + "th";
+    }
+
+    public static void sendPrivateMessage(String message, ClientHandler sender, String recipientUsername) {
         synchronized (clientHandlers) {
+            boolean foundRecipient = false;
+
             for (ClientHandler clientHandler : clientHandlers) {
-                if (clientHandler != sender) {
-                    clientHandler.sendMessage(message);
+                if (clientHandler.getUsername().equals(recipientUsername)) {
+                    clientHandler.sendMessage("From " + sender.getUsername() + ": " + message);
+                    foundRecipient = true;
+                    break;
                 }
+            }
+
+            if (!foundRecipient) {
+                sender.sendMessage("User " + recipientUsername + " not found.");
             }
         }
     }
 
-    // Remove a client handler when the client disconnects
     public static void removeClient(ClientHandler clientHandler) {
         synchronized (clientHandlers) {
             clientHandlers.remove(clientHandler);
-            System.out.println("Client disconnected");
+            System.out.println("Client " + clientHandler.getUsername() + " disconnected");
+            broadcastClientList();
+        }
+    }
+
+    private static void broadcastClientList() {
+        synchronized (clientHandlers) {
+            StringBuilder clientList = new StringBuilder("CLIENT_LIST:");
+            for (ClientHandler clientHandler : clientHandlers) {
+                clientList.append(clientHandler.getUsername()).append(",");
+            }
+            String clientListMessage = clientList.toString();
+
+            for (ClientHandler clientHandler : clientHandlers) {
+                clientHandler.sendMessage(clientListMessage);
+            }
         }
     }
 }
