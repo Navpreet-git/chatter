@@ -7,7 +7,6 @@ import java.util.*;
 public class Server {
     private static final int PORT = 5555;
     private static Set<ClientHandler> clientHandlers = Collections.synchronizedSet(new HashSet<>());
-    private static int clientCount = 0;
 
     public static void main(String[] args) {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
@@ -15,28 +14,23 @@ public class Server {
 
             while (true) {
                 Socket clientSocket = serverSocket.accept();
-                clientCount++;
-                String username = getOrdinalName(clientCount);
+                
+                BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                String username = in.readLine();
 
                 System.out.println(username + " connected");
 
-                // Create a new ClientHandler and provide the listener
                 ClientHandler clientHandler = new ClientHandler(clientSocket, username, handler -> {
-                    clientHandlers.add(handler); // Add the client only after it's ready
-                    broadcastClientList(); // Broadcast client list after the client is ready
+                    clientHandlers.add(handler);
+                    broadcastClientList();
+                    broadcastMessage(username + " has joined the chat."); // Broadcast connection
                 });
 
-                // Start the new client handler in a separate thread
-                Thread thread = new Thread(clientHandler);
-                thread.start();
+                new Thread(clientHandler).start();
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    private static String getOrdinalName(int number) {
-        return number + "th";
     }
 
     public static void sendPrivateMessage(String message, ClientHandler sender, String recipientUsername) {
@@ -61,6 +55,7 @@ public class Server {
         synchronized (clientHandlers) {
             clientHandlers.remove(clientHandler);
             System.out.println("Client " + clientHandler.getUsername() + " disconnected");
+            broadcastMessage(clientHandler.getUsername() + " has left the chat."); // Broadcast disconnection
             broadcastClientList();
         }
     }
@@ -75,6 +70,15 @@ public class Server {
 
             for (ClientHandler clientHandler : clientHandlers) {
                 clientHandler.sendMessage(clientListMessage);
+            }
+        }
+    }
+
+    // Method to broadcast a general message to all clients
+    public static void broadcastMessage(String message) {
+        synchronized (clientHandlers) {
+            for (ClientHandler clientHandler : clientHandlers) {
+                clientHandler.sendMessage(message);
             }
         }
     }

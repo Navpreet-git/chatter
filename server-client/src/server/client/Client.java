@@ -16,11 +16,14 @@ public class Client {
     private JComboBox<String> recipientComboBox; // Dropdown for recipient selection
     private JButton sendButton;
 
-    public Client(String host, int port) {
+    public Client(String host, int port, String username) {
         try {
             socket = new Socket(host, port);
             input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             output = new PrintWriter(socket.getOutputStream(), true);
+
+            // Send username to the server
+            output.println(username);
 
             // Initialize GUI
             initializeGUI();
@@ -126,6 +129,13 @@ public class Client {
     public static void main(String[] args) {
         String host = "127.0.0.1";
         int port = 5555;
-        new Client(host, port);
+
+        // Prompt user for username
+        String username = JOptionPane.showInputDialog("Enter your username:");
+        if (username != null && !username.trim().isEmpty()) {
+            new Client(host, port, username.trim());
+        } else {
+            JOptionPane.showMessageDialog(null, "Username cannot be empty");
+        }
     }
 }
